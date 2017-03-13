@@ -33,17 +33,20 @@ if(!require('RColorBrewer')){
 if(!require('plotly')){
   install.packages('plotly')
 }
+if(!require('ggthemes')){
+  install.packages('ggthemes')
+}
 ```
 
 
 ```{r}
 # Read data into R
-df <- read_excel('Grafica Joe v2.xlsx',
+df <- read_excel('Grafica Joe v3.xlsx',
                  skip = 1)
 names(df)[1] <- 'key'
 
 # Make long
-df <- gather(df, time, value, `0h`:`312h`)
+df <- gather(df, time, value, `0h`:`216h`)
 
 # Get hours
 df$hours <- as.numeric(gsub('h', '', df$time))
@@ -54,40 +57,122 @@ df <- df %>%
   mutate(p = value / first(value) * 100) %>%
   ungroup
 
+# Arrange by hours
+df <- df %>%
+  arrange(hours)
+
+# manually set to 0 parisetemia
+df$value[df$key == 'Parasitemia' &
+           df$hours == 216] <- 0
+df$p[df$key == 'Parasitemia' &
+           df$hours == 216] <- 0
+
 # Remove NA values
 df <- df %>%
   filter(!is.na(p))
+
+
+# Filter down
+df <- df %>%
+  filter(key %in% c('Hemoglobin', 'Parasitemia', 'White Blood Cells'))
+
+
+# plot
+cols <- colorRampPalette(brewer.pal(n = 9, name = 'Set1'))(length(unique(df$key)))
+
+# Make a sub dataframe for labeling hgb cut points
+hgb <- df %>% filter(grepl('Hemoglobin', key))
+hgb$time <- as.numeric(gsub('h', '', hgb$time))
+# need to interpolate the value at the unknown hours
+left <- data_frame(time = seq(0, max(hgb$time), by = 1))
+hgb <- left_join(left, hgb)
+hgb$p <- zoo::na.approx(object = hgb$p,
+                            x = hgb$time)
+hgb$value <- zoo::na.approx(object = hgb$value,
+                        x = hgb$time)
+hgb <- hgb %>% filter(time %in% c(6, 98, 174))
+hgb$hours <- hgb$time
+hgb$time <- paste0(hgb$time, 'h')
+
+# Get better labels
+
+greeks <- list(
+  bquote('HGB (g/dL)'),
+  bquote(.('Parasitemia (parasites /') ~ mu*.('L)')),
+  # bquote(.('joe'),mu),
+  bquote(.('WBCC (Leococytes /') ~ mu*.('L)')))
+
+greeks2 <- 
+  c('HGB (g/dL)',
+    'Parasitemia (parasites/microlitre)',
+    'WBCC (Leococytes/microlitre')
 
 # plot
 cols <- colorRampPalette(brewer.pal(n = 9, name = 'Set1'))(length(unique(df$key)))
 
 
-g <- ggplot(data = df,
+g <- ggplot() +
+  geom_line(data = df,
             aes(x = hours,
                 y = p,
-                z = value,
                 group = key,
                 color = key)) +
-  geom_line(alpha = 0.8, 
-            lwd = 1.5) +
-  labs(x = 'Hours after recruitment',
-       y = 'Percentage',
-       title = 'Laboratory values over time',
-       subtitle = 'As percentage of value upon recruitment') +
-  scale_color_manual(name = '',
-                     values = cols) +
-    # scale_y_sqrt(breaks = c(0, 10, 25, 50, 100, 200, 500, 1000, 2000, 3000)) +
-  geom_hline(yintercept = c(100), alpha = 0.6, lty = 3)
+  labs(x = 'Time after recruitment (hours)',
+       y = 'Percentage (%)') +
+  geom_point(data = hgb,
+             aes(x = hours,
+                 y = p),
+             pch = 6,
+             size = 3,
+             col = cols[1]) +
+  geom_hline(yintercept = c(100), alpha = 0.6, lty = 3) +
+  theme_hc()
 ```
 
 # Static plot
 
 ```{r}
-g
+g   + scale_colour_manual(name = '',
+                      values=cols, 
+                      labels=greeks) 
 ```
 
 # Interactive plot
 
 ```{r}
-plotly::ggplotly(g, tooltip = c('x', 'y', 'z'))
+# Rename wbc
+df$key <-
+  ifelse(df$key == 'White Blood Cells',
+         'WBCC (leucocytes/microlitre)',
+         # expression(paste0("WBCC (leucocytes/)", mu, 'L')),
+         df$key)
+
+# Rename parasitemia
+df <- df %>%
+  mutate(key = ifelse(key == 'Parasitemia', 'Parasitemia (parasites/microlitre)',
+                      ifelse(key == 'Hemoglobin', 'HGB (g/dL)',
+                             key)))
+
+g <- ggplot() +
+  geom_line(data = df,
+            aes(x = hours,
+                y = p,
+                group = key,
+                color = key)) +
+  labs(x = 'Time after recruitment (hours)',
+       y = 'Percentage (%)') +
+  geom_point(data = hgb,
+             aes(x = hours,
+                 y = p),
+             pch = 6,
+             size = 3,
+             col = cols[1]) +
+  geom_hline(yintercept = c(100), alpha = 0.6, lty = 3) +
+  theme_gdocs() +
+  scale_colour_manual(name = '',
+                      values=cols) 
+
+plotly::ggplotly(g, 
+                 tooltip = c('x', 'y', 'z'))
+    
 ```
