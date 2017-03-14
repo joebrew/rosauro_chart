@@ -12,6 +12,7 @@ knitr::opts_chunk$set(comment = NA,
                message = FALSE, 
                error = TRUE, 
                cache = FALSE)
+options(scipen = '999')
 ```
 
 ```{r}
@@ -77,6 +78,10 @@ df <- df %>%
   filter(key %in% c('Hemoglobin', 'Parasitemia', 'White Blood Cells'))
 
 
+# Multiply WBC by 1000
+df$value[df$key == 'White Blood Cells'] <-
+  df$value[df$key == 'White Blood Cells'] * 1000
+
 # plot
 cols <- colorRampPalette(brewer.pal(n = 9, name = 'Set1'))(length(unique(df$key)))
 
@@ -110,31 +115,57 @@ greeks2 <-
 # plot
 cols <- colorRampPalette(brewer.pal(n = 9, name = 'Set1'))(length(unique(df$key)))
 
+# Add the points
+hgb$key <- 'Hemoglobin'
+hgb$triangle <- hgb$value
+
+df <- bind_rows(hgb, df)
 
 g <- ggplot() +
   geom_line(data = df,
             aes(x = hours,
-                y = p,
+                y = value,
                 group = key,
                 color = key)) +
-  labs(x = 'Time after recruitment (hours)',
-       y = 'Percentage (%)') +
-  geom_point(data = hgb,
+  geom_point(data = df,
              aes(x = hours,
-                 y = p),
+                 y = triangle),
              pch = 6,
              size = 3,
              col = cols[1]) +
-  geom_hline(yintercept = c(100), alpha = 0.6, lty = 3) +
-  theme_hc()
+  labs(x = 'Time after recruitment (hours)',
+       y = 'Value') +
+  geom_point(data = hgb,
+             aes(x = hours,
+                 y = value),
+             pch = 6,
+             size = 3,
+             col = cols[1]) +
+  # geom_hline(yintercept = c(100), alpha = 0.6, lty = 3) +
+  theme_hc() 
+
 ```
 
 # Static plot
 
+## Rows
+
 ```{r}
 g   + scale_colour_manual(name = '',
-                      values=cols, 
-                      labels=greeks) 
+                      values=cols,
+                      labels=greeks) +
+    facet_wrap(~key, scales = 'free_y',
+             ncol = 1)
+```
+
+## Columns
+
+```{r}
+g   + scale_colour_manual(name = '',
+                      values=cols,
+                      labels=greeks) +
+    facet_wrap(~key, scales = 'free_y',
+             ncol = 3)
 ```
 
 # Interactive plot
@@ -156,23 +187,40 @@ df <- df %>%
 g <- ggplot() +
   geom_line(data = df,
             aes(x = hours,
-                y = p,
+                y = value,
                 group = key,
                 color = key)) +
-  labs(x = 'Time after recruitment (hours)',
-       y = 'Percentage (%)') +
-  geom_point(data = hgb,
+  geom_point(data = df,
              aes(x = hours,
-                 y = p),
+                 y = triangle),
              pch = 6,
              size = 3,
              col = cols[1]) +
+  labs(x = 'Time after recruitment (hours)',
+       y = '') +
   geom_hline(yintercept = c(100), alpha = 0.6, lty = 3) +
   theme_gdocs() +
   scale_colour_manual(name = '',
                       values=cols) 
+```
 
-plotly::ggplotly(g, 
+## Rows
+
+```{r}
+plotly::ggplotly(g +
+  facet_wrap(~key, scales = 'free_y',
+             ncol = 1), 
+                 tooltip = c('x', 'y', 'z'))
+    
+```
+
+
+## Columns
+
+```{r}
+plotly::ggplotly(g +
+  facet_wrap(~key, scales = 'free_y',
+             ncol = 3), 
                  tooltip = c('x', 'y', 'z'))
     
 ```
