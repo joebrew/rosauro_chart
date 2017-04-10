@@ -1,7 +1,7 @@
 ---
-title: "Chart"
+title: "Rosiglitazone effectiveness"
 author: "Rosauro and Joe"
-date: "March 9, 2017"
+date: "April 10, 2017"
 output: html_document
 ---
 
@@ -39,22 +39,25 @@ if(!require('ggthemes')){
 }
 ```
 
+# Visualizations
 
 ```{r}
 # Read data into R
-df <- read_excel('Grafica Joe v3.xlsx',
-                 skip = 1)
-names(df)[1] <- 'key'
+df <- read_excel('Joe-Rosi.xlsx',
+                 skip = 0)
 
 # Make long
-df <- gather(df, time, value, `0h`:`216h`)
+df <- gather(df, time, value, `0 h`:`72h`)
 
 # Get hours
-df$hours <- as.numeric(gsub('h', '', df$time))
+df$hours <- as.numeric(gsub('h| h', '', df$time))
+
+# MAke value numeric
+df$value <- as.numeric(df$value)
 
 # Get value as percent of first
 df <- df %>%
-  group_by(key) %>%
+  group_by(`Study number`) %>%
   mutate(p = value / first(value) * 100) %>%
   ungroup
 
@@ -62,165 +65,239 @@ df <- df %>%
 df <- df %>%
   arrange(hours)
 
-# manually set to 0 parisetemia
-df$value[df$key == 'Parasitemia' &
-           df$hours == 216] <- 0
-df$p[df$key == 'Parasitemia' &
-           df$hours == 216] <- 0
+# # manually set to 0 parisetemia
+# df$value[df$key == 'Parasitemia' &
+#            df$hours == 216] <- 0
+# df$p[df$key == 'Parasitemia' &
+#            df$hours == 216] <- 0
 
-# Remove NA values
-df <- df %>%
-  filter(!is.na(p))
-
-
-# Filter down
-df <- df %>%
-  filter(key %in% c('Hemoglobin', 'Parasitemia', 'White Blood Cells'))
+# # Remove NA values
+# df <- df %>%
+#   filter(!is.na(p))
 
 
-# Multiply WBC by 1000
-df$value[df$key == 'White Blood Cells'] <-
-  df$value[df$key == 'White Blood Cells'] * 1000
+# # Filter down
+# df <- df %>%
+#   filter(key %in% c('Hemoglobin', 'Parasitemia', 'White Blood Cells'))
+# 
+# 
+# # Multiply WBC by 1000
+# df$value[df$key == 'White Blood Cells'] <-
+#   df$value[df$key == 'White Blood Cells'] * 1000
+# 
+# # plot
+# cols <- colorRampPalette(brewer.pal(n = 9, name = 'Set1'))(length(unique(df$key)))
+# 
+# # Make a sub dataframe for labeling hgb cut points
+# hgb <- df %>% filter(grepl('Hemoglobin', key))
+# hgb$time <- as.numeric(gsub('h', '', hgb$time))
+# # need to interpolate the value at the unknown hours
+# left <- data_frame(time = seq(0, max(hgb$time), by = 1))
+# hgb <- left_join(left, hgb)
+# hgb$p <- zoo::na.approx(object = hgb$p,
+#                             x = hgb$time)
+# hgb$value <- zoo::na.approx(object = hgb$value,
+#                         x = hgb$time)
+# hgb <- hgb %>% filter(time %in% c(6, 98, 174))
+# hgb$hours <- hgb$time
+# hgb$time <- paste0(hgb$time, 'h')
+# 
+# # Get better labels
+# 
+# greeks <- list(
+#   bquote('HGB (g/dL)'),
+#   bquote(.('Parasitemia (parasites /') ~ mu*.('L)')),
+#   # bquote(.('joe'),mu),
+#   bquote(.('WBCC (Leococytes /') ~ mu*.('L)')))
+# 
+# greeks2 <- 
+#   c('HGB (g/dL)',
+#     'Parasitemia (parasites/microlitre)',
+#     'WBCC (Leococytes/microlitre')
+# 
+# # plot
+# cols <- colorRampPalette(brewer.pal(n = 9, name = 'Set1'))(length(unique(df$key)))
+# 
+# # Add the points
+# hgb$key <- 'Hemoglobin'
+# hgb$triangle <- hgb$value
+# 
+# df <- bind_rows(hgb, df)
 
-# plot
-cols <- colorRampPalette(brewer.pal(n = 9, name = 'Set1'))(length(unique(df$key)))
+# Perform interpolation
+study_numbers <- sort(unique(df$`Study number`))
+left <- expand.grid(hours = seq(0, max(df$hours, na.rm = TRUE), by = 1),
+                   `Study number` = study_numbers)
+right <- df %>%
+  dplyr::select(`Study number`, Treatment)
 
-# Make a sub dataframe for labeling hgb cut points
-hgb <- df %>% filter(grepl('Hemoglobin', key))
-hgb$time <- as.numeric(gsub('h', '', hgb$time))
-# need to interpolate the value at the unknown hours
-left <- data_frame(time = seq(0, max(hgb$time), by = 1))
-hgb <- left_join(left, hgb)
-hgb$p <- zoo::na.approx(object = hgb$p,
-                            x = hgb$time)
-hgb$value <- zoo::na.approx(object = hgb$value,
-                        x = hgb$time)
-hgb <- hgb %>% filter(time %in% c(6, 98, 174))
-hgb$hours <- hgb$time
-hgb$time <- paste0(hgb$time, 'h')
+joined <- left_join(left, df %>%
+                      dplyr::select(`Study number`,
+                                    hours,
+                                    value, 
+                                    p))
+joined <- left_join(joined,
+                    right)
+# for (i in 1:length(study_numbers)){
+#   this_study_number <- study_numbers[i]
+#   these_data <- df %>%
+#     filter(`Study number` == this_study_number)
+#   these_data$p <- zoo::na.approx(object = these_data$p,
+#                                  x = these_data$hours,
+#                                  na.rm = FALSE)
+# }
 
-# Get better labels
+df <- joined %>%
+  group_by(`Study number`) %>%
+  mutate(value = zoo::na.approx(object = value,
+                                x = hours,
+                                na.rm = FALSE),
+         p = zoo::na.approx(object = p,
+                                x = hours,
+                            na.rm = FALSE))
 
-greeks <- list(
-  bquote('HGB (g/dL)'),
-  bquote(.('Parasitemia (parasites /') ~ mu*.('L)')),
-  # bquote(.('joe'),mu),
-  bquote(.('WBCC (Leococytes /') ~ mu*.('L)')))
+# Group by treatment
+bt <- df %>%
+  group_by(Treatment, hours) %>%
+  summarise(q25 = quantile(value, 0.25, na.rm = TRUE),
+            q50 = quantile(value, 0.5, na.rm = TRUE),
+            q50p = quantile(p, 0.5, na.rm = TRUE),
+            q75 = quantile(value, 0.75, na.rm = TRUE),
+            value = mean(value,
+                         na.rm = TRUE),
+            p = mean(p, na.rm = TRUE),
+            avg_p = mean(p, na.rm = TRUE),
+            avg = mean(value, na.rm = TRUE))
 
-greeks2 <- 
-  c('HGB (g/dL)',
-    'Parasitemia (parasites/microlitre)',
-    'WBCC (Leococytes/microlitre')
-
-# plot
-cols <- colorRampPalette(brewer.pal(n = 9, name = 'Set1'))(length(unique(df$key)))
-
-# Add the points
-hgb$key <- 'Hemoglobin'
-hgb$triangle <- hgb$value
-
-df <- bind_rows(hgb, df)
-
-g <- ggplot() +
-  geom_line(data = df,
-            aes(x = hours,
-                y = value,
-                group = key,
-                color = key)) +
-  geom_point(data = df,
-             aes(x = hours,
-                 y = triangle),
-             pch = 6,
-             size = 3,
-             col = cols[1]) +
-  labs(x = 'Time after recruitment (hours)',
-       y = 'Value') +
-  geom_point(data = hgb,
-             aes(x = hours,
-                 y = value),
-             pch = 6,
-             size = 3,
-             col = cols[1]) +
-  # geom_hline(yintercept = c(100), alpha = 0.6, lty = 3) +
-  theme_hc() 
 
 ```
 
-# Static plot
-
-## Rows
+The below chart shows the _median_ parasitemia (as percentage of value at hour 0) by treatment.
 
 ```{r}
-g   + scale_colour_manual(name = '',
-                      values=cols,
-                      labels=greeks) +
-    facet_wrap(~key, scales = 'free_y',
-             ncol = 1)
+ggplot(data = bt,
+       aes(x = hours,
+           y = q50p,
+           group = Treatment,
+           color = Treatment)) +
+  geom_line() +
+  theme_hc() +
+  labs(x = 'Hours after recruitment',
+       y = 'Parasitemia percentage of hour 0',
+       title = 'Parasitemia: median: Placebo vs. Rosiglitazone') +
+  geom_vline(xintercept = seq(0, 100, 10),
+             lty = 2,
+             alpha =0.2)
 ```
 
-## Columns
+The below chart is identical to the above, but shows true parasitemia values (rather than a percentage of hour 0).
 
 ```{r}
-g   + scale_colour_manual(name = '',
-                      values=cols,
-                      labels=greeks) +
-    facet_wrap(~key, scales = 'free_y',
-             ncol = 3)
+ggplot(data = bt,
+       aes(x = hours,
+           y = q50,
+           group = Treatment,
+           color = Treatment)) +
+  geom_line() +
+  theme_hc() +
+  labs(x = 'Hours after recruitment',
+       y = 'Parasitemia',
+       title = 'Parasitemia: median: Placebo vs. Rosiglitazone') +
+  geom_vline(xintercept = seq(0, 100, 10),
+             lty = 2,
+             alpha =0.2)
 ```
 
-# Interactive plot
+
+As an alternative to the median (which can mask magnitude in extremes), we can also explore the _mean_ (below two charts).
+
 
 ```{r}
-# Rename wbc
-df$key <-
-  ifelse(df$key == 'White Blood Cells',
-         'WBCC (leucocytes/microlitre)',
-         # expression(paste0("WBCC (leucocytes/)", mu, 'L')),
-         df$key)
-
-# Rename parasitemia
-df <- df %>%
-  mutate(key = ifelse(key == 'Parasitemia', 'Parasitemia (parasites/microlitre)',
-                      ifelse(key == 'Hemoglobin', 'HGB (g/dL)',
-                             key)))
-
-g <- ggplot() +
-  geom_line(data = df,
-            aes(x = hours,
-                y = value,
-                group = key,
-                color = key)) +
-  geom_point(data = df,
-             aes(x = hours,
-                 y = triangle),
-             pch = 6,
-             size = 3,
-             col = cols[1]) +
-  labs(x = 'Time after recruitment (hours)',
-       y = '') +
-  geom_hline(yintercept = c(100), alpha = 0.6, lty = 3) +
-  theme_gdocs() +
-  scale_colour_manual(name = '',
-                      values=cols) 
+ggplot(data = bt,
+       aes(x = hours,
+           y = avg_p,
+           group = Treatment,
+           color = Treatment)) +
+  geom_line() +
+  theme_hc() +
+  labs(x = 'Hours after recruitment',
+       y = 'Parasitemia percentage of hour 0',
+       title = 'Parasitemia: mean: Placebo vs. Rosiglitazone') +
+  geom_vline(xintercept = seq(0, 100, 10),
+             lty = 2,
+             alpha =0.2)
 ```
 
-## Rows
 
 ```{r}
-plotly::ggplotly(g +
-  facet_wrap(~key, scales = 'free_y',
-             ncol = 1), 
-                 tooltip = c('x', 'y', 'z'))
-    
+ggplot(data = bt,
+       aes(x = hours,
+           y = avg,
+           group = Treatment,
+           color = Treatment)) +
+  geom_line() +
+  theme_hc() +
+  labs(x = 'Hours after recruitment',
+       y = 'Parasitemia',
+       title = 'Parasitemia: mean: Placebo vs. Rosiglitazone') +
+  geom_vline(xintercept = seq(0, 100, 10),
+             lty = 2,
+             alpha =0.2)
 ```
 
 
-## Columns
+All summary statistics (median, mean, etc.) can mask important individual variation. The below chart shows one line for each individual, colored by treatment protocol.
 
 ```{r}
-plotly::ggplotly(g +
-  facet_wrap(~key, scales = 'free_y',
-             ncol = 3), 
-                 tooltip = c('x', 'y', 'z'))
-    
+ggplot(data = df,
+       aes(x = hours,
+           y = value,
+           color = Treatment,
+           group = `Study number`)) +
+  geom_line(alpha = 0.6) +
+  theme_hc() +
+  labs(x = 'Hours',
+       y = 'Parasitemia',
+       title = 'Improvement trajectories')
 ```
+
+The below chart is identical to the above, but the y-axis is a percentage of value at hour 0.
+
+```{r}
+ggplot(data = df,
+       aes(x = hours,
+           y = p,
+           color = Treatment,
+           group = `Study number`)) +
+  geom_line(alpha = 0.6) +
+  theme_hc() +
+  labs(x = 'Hours',
+       y = 'Parasitemia: percentage of hour 0',
+       title = 'Improvement trajectories') 
+
+```
+
+# Hypothesis test
+
+For now, we'll use a simple linear model to estimate the effect (and significance) of treatment on parasitemia, adjusted for time elapsed and parasitemia at hour 0.
+
+```{r}
+model_data <- df %>%
+  arrange(hours) %>%
+  group_by(id = `Study number`) %>%
+  mutate(start_value = first(value)) %>%
+  ungroup
+
+fit <- lm(value ~ Treatment + start_value,
+          data = model_data)
+
+out <- broom::tidy(fit)
+
+out$estimate <- round(out$estimate, digits = 3)
+out$std.error <- round(out$std.error, digits = 3)
+out$statistic <- round(out$statistic, digits = 3)
+out$p.value <- round(out$p.value, digits = 6)
+DT::datatable(out)
+```
+
+This simple approach is subject to a great deal of bias (non-linearity, outliers), but gives us an initial (and reproducible) method for assessing significance.
